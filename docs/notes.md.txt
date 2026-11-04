@@ -78,3 +78,53 @@ Address Resolution Protocol (request)
     Target MAC address: 00:00:00_00:00:00 (00:00:00:00:00:00)
     Target IP address: 192.168.0.109
 
+Wireshark notes: Ethernet, IPv4, ICMP, UDP, TCP and ARP
+
+Captured on my Windows laptop over Wi-Fi. MAC addresses are partly masked.
+
+1. ICMP echo request (ping to 8.8.8.8)
+
+Ethernet II
+
+Destination MAC: TPLink_xx:xx:xx (3c:64:cf:xx:xx:xx), my router, the next hop
+Source MAC: Intel_xx:xx:xx (48:51:c5:xx:xx:xx), my laptop
+EtherType: 0x0800, meaning the payload is an IPv4 packet
+
+IPv4
+
+Version 4, header length 20 bytes, total length 60 bytes
+TTL: 128 (Windows default). Every router decrements it, and the packet is dropped at 0, which prevents endless loops.
+Protocol: 1 (ICMP)
+Source 192.168.0.109, destination 8.8.8.8
+Header checksum shows 0x0000 "validation disabled". This is checksum offload: the network card fills in the checksum after Wireshark sees the packet, so it is not an error.
+
+ICMP
+
+Type 8 (echo request), code 0. The reply has type 0.
+32 bytes of data. Frame size check: 14 (Ethernet) + 20 (IPv4) + 8 (ICMP) + 32 (data) = 74 bytes.
+2. UDP (DNS response)
+A DNS response from my router (192.168.0.1) to my laptop (192.168.0.109). The router acts as the DNS forwarder.
+IPv4 protocol number: 17 (UDP)
+Source port 53 (DNS server), destination port 62566 (random port chosen by my laptop)
+UDP length: ___ bytes (should be IP total length 194 minus the 20-byte IP header = 174)
+UDP checksum: ___
+The UDP header is only 8 bytes: source port, destination port, length and checksum. There is no handshake and no acknowledgment.
+In the query, the ports are the other way round (source = random port, destination = 53). The response swaps them because it goes back to whoever asked.
+3. TCP (for comparison)
+IPv4 protocol number 6. TCP has a larger header with sequence numbers, acknowledgment numbers and flags (SYN, ACK, FIN), and it needs a connection setup (three-way handshake) before data flows.
+It gives reliable, ordered delivery, but with more overhead and delay than UDP.
+4. ARP
+The capture shows an ARP request from my router: "Who has 192.168.0.109? Tell 192.168.0.1".
+Opcode 1 (request). The target MAC is 00:00:00:00:00:00 because that is the unknown being asked for.
+This request was sent directly to my laptop's MAC (unicast), which routers do to refresh an entry they already have. The first request for an unknown device goes to the broadcast address ff:ff:ff:ff:ff:ff.
+The reply (opcode 2) contains the MAC address that belongs to the IP.
+Questions
+
+1. Why is the destination MAC my router's, while the destination IP is 8.8.8.8? The MAC address is only used on the local network segment, to deliver the frame to the next hop. 8.8.8.8 is not on my local network, so my laptop sends the frame to the router's MAC, and the router forwards the packet toward Google. At each hop the Ethernet header is rewritten with new MAC addresses, while the IP addresses stay the same from source to destination.
+
+2. What does ARP do, and why would my STM32 need it? ARP finds the MAC address that belongs to an IP address on the local network. Ethernet frames need a destination MAC, but my code only knows the IP address of the laptop. So before the board can send its first UDP packet, it broadcasts an ARP request, the laptop answers with its MAC, and the board stores the pair in its ARP cache. The lwIP stack on the STM32 handles this automatically, but if the laptop and board are on different subnets or the cable is not connected, the ARP exchange fails and no UDP packet is sent.
+
+3. How do UDP and TCP differ, and why use UDP for sensor data? TCP sets up a connection first, numbers every byte, acknowledges data, and resends lost data, so it is reliable and ordered, but it adds delay, memory use and overhead. UDP just sends a datagram with an 8-byte header and no guarantees. For periodic sensor readings, UDP is a good fit: a newer reading makes a lost old one irrelevant, retransmissions would only add delay, and a small microcontroller saves RAM and CPU time. If I need reliability, I can add a sequence number and an acknowledgment in my own protocol, which is what my project does.
+
+2b. What is an MTU, and what happens if a packet is bigger than it? The Maximum Transmission Unit is the largest packet a link can carry. For standard Ethernet it is 1500 bytes of IP packet. With a 20-byte IPv4 header and an 8-byte UDP header, the largest UDP payload that fits without fragmentation is 1472 bytes. If a packet is larger, the sender or a router either splits it into fragments, which adds overhead and makes loss more likely, or drops it if the "don't fragment" flag is set. My sensor packets are about 15 bytes, so this is not a problem, but it matters for benchmarks with larger packet sizes.
+
