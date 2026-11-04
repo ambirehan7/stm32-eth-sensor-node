@@ -59,7 +59,7 @@ ARP
 
 Frame 2: Packet, 42 bytes on wire (336 bits), 42 bytes captured (336 bits) on interface \Device\NPF_{E8C5C88A-07C1-489B-A057-9B6961B0F054}, id 0
 Ethernet II, Src: TPLink_ef:e7:0a (3c:64:cf:XX:XX:XX), Dst: Intel_07:5e:27 (48:51:c5:XX:XX:XX)
-    Destination: Intel_07:5e:27 (48:51:c5:07:5e:27)
+    Destination: Intel_07:5e:27 (48:51:c5:XX:XX:XX)
         .... ..0. .... .... .... .... = LG bit: Globally unique address (factory default)
         .... ...0 .... .... .... .... = IG bit: Individual address (unicast)
     Source: TPLink_ef:e7:0a (3c:64:cf:ef:e7:0a)
